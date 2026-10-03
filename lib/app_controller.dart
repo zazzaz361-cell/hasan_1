@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart' hide Category;
+import 'package:flutter/widgets.dart'
+    show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 
 import 'data/repositories.dart';
 import 'models/restaurant.dart';
@@ -28,7 +30,7 @@ class CartLine {
   );
 }
 
-class AppController extends ChangeNotifier {
+class AppController extends ChangeNotifier with WidgetsBindingObserver {
   AppController({
     required this.productRepository,
     required this.categoryRepository,
@@ -52,6 +54,10 @@ class AppController extends ChangeNotifier {
   StreamSubscription<void>? _orderSubscription;
   StreamSubscription<void>? _sessionSubscription;
   Timer? _orderPoller;
+  Timer? _resubscribeTimer;
+  int _syncGeneration = 0;
+  bool _syncActive = false;
+  bool _observingLifecycle = false;
   Future<OrderRecord>? _pendingSubmit;
 
   bool get isCloudBacked => staffAuth != null;
@@ -133,37 +139,86 @@ class AppController extends ChangeNotifier {
   }
 
   void _startOrderSync() {
-    final source = orderRepository;
-    if (source is OrderChangeSource && _orderSubscription == null) {
-      _orderSubscription = (source as OrderChangeSource)
-          .orderChanges(
-            onStatus: (status) {
-              final recovered =
-                  status == 'subscribed' && realtimeStatus != 'subscribed';
-              realtimeStatus = status;
-              notifyListeners();
-              // Orders created while the channel was down are not replayed.
-              if (recovered) refreshOrders();
-            },
-          )
-          .listen((_) => refreshOrders());
-    }
+    _syncActive = true;
+    _subscribeOrders();
     _sessionSubscription ??= staffAuth?.sessionEnded().listen(
       (_) => _onStaffSessionEnded(),
     );
-    // Fallback only: polls while the realtime channel is not subscribed.
-    _orderPoller ??= Timer.periodic(const Duration(seconds: 20), (_) {
-      if (realtimeStatus != 'subscribed') refreshOrders();
+    // Safety net: a "subscribed" channel can silently stop receiving events.
+    _orderPoller ??= Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => refreshOrders(),
+    );
+    if (!_observingLifecycle) {
+      WidgetsBinding.instance.addObserver(this);
+      _observingLifecycle = true;
+    }
+  }
+
+  void _subscribeOrders() {
+    final source = orderRepository;
+    if (source is! OrderChangeSource ||
+        _orderSubscription != null ||
+        !_syncActive) {
+      return;
+    }
+    final generation = ++_syncGeneration;
+    _orderSubscription = (source as OrderChangeSource)
+        .orderChanges(
+          onStatus: (status) {
+            // Ignore callbacks from channels that were already replaced.
+            if (generation != _syncGeneration) return;
+            final recovered =
+                status == 'subscribed' && realtimeStatus != 'subscribed';
+            realtimeStatus = status;
+            notifyListeners();
+            // Orders created while the channel was down are not replayed.
+            if (recovered) refreshOrders();
+            if (status.startsWith('channelError') ||
+                status.startsWith('timedOut') ||
+                status.startsWith('closed')) {
+              _scheduleResubscribe();
+            }
+          },
+        )
+        .listen((_) => refreshOrders());
+  }
+
+  void _scheduleResubscribe() {
+    if (_resubscribeTimer != null) return;
+    _syncGeneration++;
+    _orderSubscription?.cancel();
+    _orderSubscription = null;
+    _resubscribeTimer = Timer(const Duration(seconds: 3), () {
+      _resubscribeTimer = null;
+      _subscribeOrders();
     });
   }
 
-  void _onStaffSessionEnded() {
+  void _stopOrderSync() {
+    _syncActive = false;
+    _syncGeneration++;
     _orderSubscription?.cancel();
     _orderSubscription = null;
+    _resubscribeTimer?.cancel();
+    _resubscribeTimer = null;
     _sessionSubscription?.cancel();
     _sessionSubscription = null;
     _orderPoller?.cancel();
     _orderPoller = null;
+    if (_observingLifecycle) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observingLifecycle = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _syncActive) refreshOrders();
+  }
+
+  void _onStaffSessionEnded() {
+    _stopOrderSync();
     orders = [];
     realtimeStatus = 'idle';
     staffSessionExpired = true;
@@ -172,9 +227,7 @@ class AppController extends ChangeNotifier {
 
   @override
   void dispose() {
-    _orderSubscription?.cancel();
-    _sessionSubscription?.cancel();
-    _orderPoller?.cancel();
+    _stopOrderSync();
     super.dispose();
   }
 
