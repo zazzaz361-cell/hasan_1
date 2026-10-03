@@ -3,7 +3,7 @@
     "short_name": "مطعم داري",
     "start_url": "./",
     "display": "standalone",
-    "background_color": "#F7F6F2",
+    "background_color": "#FFFFFF",
     "theme_color": "#191917",
     "description": "منيو داري الرقمي ونظام الكاشير.",
     "prefer_related_applications": false,
