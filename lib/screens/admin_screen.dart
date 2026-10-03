@@ -1301,6 +1301,7 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
   bool _isBridge = false;
   bool _testing = false;
   ConnectionStatus _status = ConnectionStatus.disconnected;
+  LoyverseTestResult? _loyverse;
 
   @override
   void dispose() {
@@ -1334,6 +1335,7 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
       ),
       const SizedBox(height: 16),
       _statusRow(),
+      if (!_isBridge && _loyverse != null) _loyverseRow(_loyverse!),
       const SizedBox(height: 14),
       if (_isBridge) ...[
         TextField(
@@ -1353,7 +1355,10 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
       ] else ...[
         TextField(
           controller: _apiBase,
-          decoration: const InputDecoration(labelText: 'API Base URL'),
+          decoration: const InputDecoration(
+            labelText: 'API Base URL',
+            hintText: 'https://api.loyverse.com/v1.0',
+          ),
         ),
         const SizedBox(height: 10),
         TextField(
@@ -1369,12 +1374,17 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
         TextField(
           controller: _apiKey,
           obscureText: true,
-          decoration: const InputDecoration(labelText: 'API Key'),
+          decoration: const InputDecoration(
+            labelText: 'API Key',
+            helperText:
+                'غير مستخدم مع Loyverse. لا تُدخل الـ Access Token هنا؛ يُحفظ كسر في Supabase.',
+            helperMaxLines: 2,
+          ),
         ),
       ],
       const SizedBox(height: 15),
       const Text(
-        'وضع التطوير: اختبار الاتصال لا يرسل طلبًا حقيقيًا، والنتيجة تبقى غير متصل حتى إعداد خدمة فعلية.',
+        'اختبار Loyverse يتم عبر Supabase Edge Function (قراءة فقط: GET /merchant/). الـ Access Token محفوظ كسر في Supabase ولا يمر بالمتصفح.',
         style: TextStyle(color: DariColors.secondary, height: 1.5),
       ),
       const SizedBox(height: 15),
@@ -1425,24 +1435,55 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
     );
   }
 
+  Widget _loyverseRow(LoyverseTestResult result) {
+    final name = result.merchantName;
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          Icon(
+            result.connected ? Icons.check_circle : Icons.error_outline,
+            size: 18,
+            color: result.connected ? DariColors.success : Colors.redAccent,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              result.connected && name != null
+                  ? '${result.message} — $name'
+                  : result.message,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _testConnection() async {
     setState(() {
       _testing = true;
       _status = ConnectionStatus.connecting;
     });
-    final status = await widget.controller.connectionRepository.testConnection(
-      _settings(),
-    );
+    final repository = widget.controller.connectionRepository;
+    if (_isBridge) {
+      final status = await repository.testConnection(_settings());
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _testing = false;
+      });
+      return;
+    }
+    final result = await repository.testLoyverseConnection(_settings());
     if (!mounted) return;
     setState(() {
-      _status = status;
+      _loyverse = result;
+      _status = result.connected
+          ? ConnectionStatus.connected
+          : ConnectionStatus.error;
       _testing = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('لا يوجد خادم مهيأ للاختبار في وضع التطوير.'),
-      ),
-    );
   }
 
   ConnectionSettings _settings() => ConnectionSettings(

@@ -522,4 +522,56 @@ class SupabaseConnectionRepository implements ConnectionRepository {
       return ConnectionStatus.error;
     }
   }
+
+  // The Loyverse token lives only in the Edge Function secret; nothing secret is sent.
+  @override
+  Future<LoyverseTestResult> testLoyverseConnection(
+    ConnectionSettings settings,
+  ) async {
+    try {
+      final response = await _client.functions.invoke(
+        'loyverse-test-connection',
+        body: {'baseUrl': settings.apiBaseUrl},
+      );
+      final data = response.data;
+      if (data is! Map) return _loyverseFailure('unknown');
+      if (data['ok'] == true) {
+        final name = data['merchant_name'];
+        return LoyverseTestResult(
+          connected: true,
+          message: 'Loyverse Connected',
+          merchantName: name is String && name.isNotEmpty ? name : null,
+        );
+      }
+      return _loyverseFailure('${data['code']}');
+    } on FunctionException catch (error) {
+      final details = error.details;
+      return _loyverseFailure(
+        error.status == 404
+            ? 'function_not_deployed'
+            : details is Map
+            ? '${details['code']}'
+            : 'unknown',
+      );
+    } catch (_) {
+      return _loyverseFailure('network_error');
+    }
+  }
+
+  LoyverseTestResult _loyverseFailure(String code) => LoyverseTestResult(
+    connected: false,
+    message: switch (code) {
+      'unauthorized' => 'Loyverse رفض الـ Access Token. تحقق من صلاحيته.',
+      'token_not_configured' =>
+        'لم يتم ضبط السر LOYVERSE_ACCESS_TOKEN في Supabase.',
+      'invalid_base_url' =>
+        'API Base URL غير مدعوم. استخدم https://api.loyverse.com/v1.0',
+      'rate_limited' => 'Loyverse يحدّ الطلبات حالياً. حاول بعد قليل.',
+      'forbidden' => 'يجب تسجيل الدخول كموظف لاختبار الاتصال.',
+      'function_not_deployed' =>
+        'لم يتم نشر الدالة loyverse-test-connection في Supabase.',
+      'network_error' => 'تعذر الوصول إلى Loyverse. تحقق من الشبكة.',
+      _ => 'فشل الاتصال بـ Loyverse.',
+    },
+  );
 }

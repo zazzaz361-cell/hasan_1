@@ -88,6 +88,21 @@ abstract interface class ConnectionRepository {
   Future<ConnectionSettings> loadSettings();
   Future<void> saveSettings(ConnectionSettings settings);
   Future<ConnectionStatus> testConnection(ConnectionSettings settings);
+  Future<LoyverseTestResult> testLoyverseConnection(
+    ConnectionSettings settings,
+  );
+}
+
+class LoyverseTestResult {
+  const LoyverseTestResult({
+    required this.connected,
+    required this.message,
+    this.merchantName,
+  });
+
+  final bool connected;
+  final String message;
+  final String? merchantName;
 }
 
 abstract interface class RestaurantSettingsRepository {
@@ -391,4 +406,12 @@ class MockLocalRepository
   @override
   Future<ConnectionStatus> testConnection(ConnectionSettings settings) async =>
       ConnectionStatus.disconnected;
+
+  @override
+  Future<LoyverseTestResult> testLoyverseConnection(
+    ConnectionSettings settings,
+  ) async => const LoyverseTestResult(
+    connected: false,
+    message: 'اختبار Loyverse يتطلب الاتصال بـ Supabase.',
+  );
 }
