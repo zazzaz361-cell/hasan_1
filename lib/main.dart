@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -15,6 +16,11 @@ import 'ui/brand.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Release builds must never fall back to the device-local mock repository.
+  if (kReleaseMode && !SupabaseConfig.isConfigured) {
+    runApp(const _MissingConfigApp());
+    return;
+  }
   final preferences = await SharedPreferences.getInstance();
   final repository = MockLocalRepository(preferences);
   late final AppController controller;
@@ -55,6 +61,30 @@ Future<void> main() async {
   }
   await controller.load();
   runApp(DariRestaurantApp(controller: controller));
+}
+
+class _MissingConfigApp extends StatelessWidget {
+  const _MissingConfigApp();
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'Configuration error: SUPABASE_URL and SUPABASE_ANON_KEY were '
+              'not provided at build time. Rebuild with both --dart-define '
+              'values.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class DariRestaurantApp extends StatelessWidget {
