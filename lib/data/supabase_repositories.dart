@@ -190,6 +190,47 @@ class SupabaseOrderRepository implements OrderRepository, OrderChangeSource {
   }
 
   @override
+  Future<void> deleteOrder(String orderId) async {
+    try {
+      await _client.rpc<dynamic>(
+        'delete_processed_order',
+        params: {'p_order_id': orderId},
+      );
+    } catch (error) {
+      throw _deletionException(error, 'تعذر حذف الطلب');
+    }
+  }
+
+  @override
+  Future<List<String>> deleteProcessedOrders() async {
+    try {
+      final result = await _client.rpc<dynamic>('delete_processed_orders');
+      if (result is! List) {
+        throw const FormatException(
+          'Unexpected delete_processed_orders result',
+        );
+      }
+      return result.map((id) => id as String).toList();
+    } catch (error) {
+      throw _deletionException(error, 'تعذر حذف الطلبات المعالجة');
+    }
+  }
+
+  OrderDeletionException _deletionException(Object error, String message) {
+    final detail = error is PostgrestException
+        ? '${error.code ?? ''} ${error.message}'.trim()
+        : '$error';
+    final errorText = error is PostgrestException ? error.message : '$error';
+    final userMessage = errorText.contains('not_authorized')
+        ? 'انتهت صلاحية الجلسة أو لا تملك صلاحية حذف الطلبات.'
+        : errorText.contains('order_not_deletable')
+        ? 'لا يمكن حذف الطلب غير المعالج أو غير الموجود.'
+        : '$message. تحقق من الاتصال وصلاحية الموظف ثم حاول مرة أخرى.';
+    debugPrint('order deletion failed: $detail');
+    return OrderDeletionException(userMessage, detail: detail);
+  }
+
+  @override
   Stream<void> orderChanges({void Function(String status)? onStatus}) {
     late final StreamController<void> controller;
     RealtimeChannel? channel;

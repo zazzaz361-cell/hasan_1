@@ -9,6 +9,79 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  test(
+    'local order numbers remain consumed after processed orders are deleted',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final preferences = await SharedPreferences.getInstance();
+      final repository = MockLocalRepository(preferences);
+      final now = DateTime.now();
+
+      OrderRecord createOrder(
+        String id, {
+        OrderSource source = OrderSource.tableQr,
+        DateTime? createdAt,
+      }) => OrderRecord(
+        id: id,
+        orderNumber: '',
+        source: source,
+        type: OrderType.dineIn,
+        tableNumber: 5,
+        items: [
+          OrderItem(
+            productId: seedProducts.first.id,
+            productName: seedProducts.first.nameAr,
+            unitPrice: seedProducts.first.price,
+            quantity: 1,
+          ),
+        ],
+        total: seedProducts.first.price,
+        createdAt: createdAt ?? now,
+      );
+
+      final first = await repository.submitOrder(createOrder('first'));
+      await repository.updateOrderStatus(first.id, OrderStatus.confirmed);
+      final pending = await repository.submitOrder(
+        createOrder('pending', source: OrderSource.publicLink),
+      );
+
+      expect(first.orderNumber, '1');
+      expect(pending.orderNumber, '2');
+      await expectLater(
+        repository.deleteOrder(pending.id),
+        throwsA(isA<OrderDeletionException>()),
+      );
+
+      expect(await repository.deleteProcessedOrders(), [first.id]);
+      final next = await repository.submitOrder(
+        createOrder('next', source: OrderSource.cashierManual),
+      );
+
+      expect(next.orderNumber, '3');
+      await repository.updateOrderStatus(next.id, OrderStatus.cancelled);
+      await repository.deleteOrder(next.id);
+      expect(
+        (await repository.submitOrder(createOrder('after-single-delete')))
+            .orderNumber,
+        '4',
+      );
+      expect(
+        (await repository.submitOrder(
+          createOrder(
+            'next-day',
+            createdAt: DateTime(now.year, now.month, now.day + 1),
+          ),
+        )).orderNumber,
+        '1',
+      );
+      expect((await repository.loadOrders()).map((order) => order.id), [
+        'next-day',
+        'after-single-delete',
+        'pending',
+      ]);
+    },
+  );
+
   test('menu seed matches verified reference items and pizza prices', () {
     expect(
       seedProducts.any(

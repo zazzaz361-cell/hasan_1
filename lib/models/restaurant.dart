@@ -206,20 +206,23 @@ class OrderRecord {
   final DateTime createdAt;
   final OrderStatus status;
 
-  OrderRecord copyWith({OrderStatus? status}) => OrderRecord(
-    id: id,
-    orderNumber: orderNumber,
-    source: source,
-    type: type,
-    tableNumber: tableNumber,
-    customerName: customerName,
-    customerPhone: customerPhone,
-    customerAddress: customerAddress,
-    items: items,
-    total: total,
-    createdAt: createdAt,
-    status: status ?? this.status,
-  );
+  bool get isProcessed => status != OrderStatus.pending;
+
+  OrderRecord copyWith({OrderStatus? status, String? orderNumber}) =>
+      OrderRecord(
+        id: id,
+        orderNumber: orderNumber ?? this.orderNumber,
+        source: source,
+        type: type,
+        tableNumber: tableNumber,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        customerAddress: customerAddress,
+        items: items,
+        total: total,
+        createdAt: createdAt,
+        status: status ?? this.status,
+      );
 
   Map<String, Object?> toJson() => {
     'id': id,

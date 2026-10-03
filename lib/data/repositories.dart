@@ -33,6 +33,8 @@ abstract interface class OrderRepository {
   Future<List<OrderRecord>> loadOrders();
   Future<OrderRecord> submitOrder(OrderRecord order);
   Future<void> updateOrderStatus(String orderId, OrderStatus status);
+  Future<void> deleteOrder(String orderId);
+  Future<List<String>> deleteProcessedOrders();
 }
 
 abstract interface class OrderChangeSource {
@@ -55,6 +57,12 @@ class OrderSubmitException implements Exception {
 
 class OrderStatusException implements Exception {
   const OrderStatusException(this.message, {this.detail = ''});
+  final String message;
+  final String detail;
+}
+
+class OrderDeletionException implements Exception {
+  const OrderDeletionException(this.message, {this.detail = ''});
   final String message;
   final String detail;
 }
@@ -270,9 +278,31 @@ class MockLocalRepository
   @override
   Future<OrderRecord> submitOrder(OrderRecord order) async {
     final values = await loadOrders();
-    values.insert(0, order);
+    final now = order.createdAt.toLocal();
+    final dateKey =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    final counterKey = 'dari.orders.last-number.$dateKey';
+    final priorNumbers = values
+        .where((value) {
+          final createdAt = value.createdAt.toLocal();
+          return createdAt.year == now.year &&
+              createdAt.month == now.month &&
+              createdAt.day == now.day;
+        })
+        .map((value) => int.tryParse(value.orderNumber) ?? 0);
+    final lastNumber =
+        _preferences.getInt(counterKey) ??
+        priorNumbers.fold<int>(
+          0,
+          (maximum, value) => value > maximum ? value : maximum,
+        );
+    final stored = order.copyWith(orderNumber: '${lastNumber + 1}');
+    await _preferences.setInt(counterKey, lastNumber + 1);
+    values.insert(0, stored);
     await _writeList(_ordersKey, values, (value) => value.toJson());
-    return order;
+    return stored;
   }
 
   @override
@@ -282,6 +312,37 @@ class MockLocalRepository
     if (index < 0) return;
     values[index] = values[index].copyWith(status: status);
     await _writeList(_ordersKey, values, (value) => value.toJson());
+  }
+
+  @override
+  Future<void> deleteOrder(String orderId) async {
+    final values = await loadOrders();
+    final index = values.indexWhere((value) => value.id == orderId);
+    if (index < 0 || !values[index].isProcessed) {
+      throw const OrderDeletionException(
+        'لا يمكن حذف الطلب. الطلب غير موجود أو لم تتم معالجته.',
+      );
+    }
+    await _writeList(
+      _ordersKey,
+      values.where((value) => value.id != orderId).toList(),
+      (value) => value.toJson(),
+    );
+  }
+
+  @override
+  Future<List<String>> deleteProcessedOrders() async {
+    final values = await loadOrders();
+    final deletedIds = values
+        .where((value) => value.isProcessed)
+        .map((value) => value.id)
+        .toList();
+    await _writeList(
+      _ordersKey,
+      values.where((value) => !value.isProcessed).toList(),
+      (value) => value.toJson(),
+    );
+    return deletedIds;
   }
 
   @override

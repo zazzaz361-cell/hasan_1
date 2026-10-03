@@ -41,8 +41,10 @@ Without Supabase settings the app keeps using the local development repository.
 With them, customer orders go to Supabase and the cashier reads them from there.
 
 1. In the Supabase SQL Editor run `supabase/migrations/001_dari_schema.sql`,
-   `supabase/migrations/003_product_image_storage.sql`, then `supabase/seed.sql`
-   (menu data generated from `lib/data/menu_seed.dart` only).
+   `supabase/migrations/002_fix_order_realtime_and_permissions.sql`,
+   `supabase/migrations/003_product_image_storage.sql`, and
+   `supabase/migrations/004_daily_order_numbers_and_processed_order_deletion.sql`,
+   then `supabase/seed.sql` (menu data generated from `lib/data/menu_seed.dart` only).
 2. Dashboard -> Authentication -> Users: create a staff user (email + password).
 3. Authorize that user (replace the UUID with the user's id):
 
@@ -65,6 +67,8 @@ Do not commit credentials. `.env` files are git-ignored; `.env.example` holds em
 
 Security model: customers never write to `orders` directly; they call the `create_order` RPC, which
 validates the source/type/customer fields and takes prices from `products`. Staff (Supabase Auth users
-listed in `staff_profiles`) can read orders and change their status; the cashier PIN screen stays as a
-local gate and is followed by a staff sign-in. The Admin -> Connection Settings screen is unchanged;
+listed in `staff_profiles`) can read orders and change their status; processed-order deletion is
+available only through staff-checked RPCs. The cashier PIN screen stays as a local gate and is followed
+by a staff sign-in. Order numbers are assigned transactionally in PostgreSQL per Asia/Baghdad calendar
+date and remain consumed after orders are deleted. The Admin -> Connection Settings screen is unchanged;
 its connection test now reports Supabase reachability when configured.

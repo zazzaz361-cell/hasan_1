@@ -272,10 +272,9 @@ class AppController extends ChangeNotifier {
   }) async {
     if (cart.isEmpty) throw StateError('empty_cart');
     final now = DateTime.now();
-    final number = (1001 + orders.length).toString();
     final order = OrderRecord(
       id: '${now.microsecondsSinceEpoch}',
-      orderNumber: number,
+      orderNumber: '',
       source: source,
       type: type,
       tableNumber: tableNumber,
@@ -306,6 +305,32 @@ class AppController extends ChangeNotifier {
   Future<void> updateOrderStatus(OrderRecord order, OrderStatus status) async {
     await orderRepository.updateOrderStatus(order.id, status);
     await refreshOrders();
+  }
+
+  Future<void> deleteOrder(OrderRecord order) async {
+    if (!await hasStaffSession()) {
+      throw const OrderDeletionException(
+        'سجّل الدخول كموظف مخوّل قبل حذف الطلب.',
+      );
+    }
+    await orderRepository.deleteOrder(order.id);
+    orders = orders.where((value) => value.id != order.id).toList();
+    notifyListeners();
+    await refreshOrders();
+  }
+
+  Future<int> deleteProcessedOrders() async {
+    if (!await hasStaffSession()) {
+      throw const OrderDeletionException(
+        'سجّل الدخول كموظف مخوّل قبل حذف الطلبات.',
+      );
+    }
+    final deletedIds = await orderRepository.deleteProcessedOrders();
+    final deletedSet = deletedIds.toSet();
+    orders = orders.where((value) => !deletedSet.contains(value.id)).toList();
+    notifyListeners();
+    await refreshOrders();
+    return deletedIds.length;
   }
 
   Future<void> saveProduct(Product product) async {

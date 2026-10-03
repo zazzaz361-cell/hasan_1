@@ -178,6 +178,7 @@ class _OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<_OrdersScreen> {
   int _filter = 0;
+  bool _deletingAll = false;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -192,31 +193,49 @@ class _OrdersScreenState extends State<_OrdersScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(19, 18, 19, 9),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: SectionHeading(
-                    'الطلبات الواردة',
-                    subtitle: widget.controller.isCloudBacked
-                        ? (widget.controller.ordersError != null &&
-                                  showBackendDiagnostics
-                              ? 'فشل جلب الطلبات: ${widget.controller.ordersError}'
-                              : showBackendDiagnostics
-                              ? 'تتحدّث مباشرة من السحابة • realtime: ${widget.controller.realtimeStatus}'
-                              : 'تتحدّث مباشرة من السحابة')
-                        : 'تُحدّث محليًا عند إنشاء طلب',
-                  ),
-                ),
-                SegmentedButton<int>(
-                  showSelectedIcon: false,
-                  segments: const [
-                    ButtonSegment(value: 1, label: Text('الوارد')),
-                    ButtonSegment(value: 2, label: Text('المؤكد')),
-                    ButtonSegment(value: 0, label: Text('الكل')),
+                Row(
+                  children: [
+                    Expanded(
+                      child: SectionHeading(
+                        'الطلبات الواردة',
+                        subtitle: widget.controller.isCloudBacked
+                            ? (widget.controller.ordersError != null &&
+                                      showBackendDiagnostics
+                                  ? 'فشل جلب الطلبات: ${widget.controller.ordersError}'
+                                  : showBackendDiagnostics
+                                  ? 'تتحدّث مباشرة من السحابة • realtime: ${widget.controller.realtimeStatus}'
+                                  : 'تتحدّث مباشرة من السحابة')
+                            : 'تُحدّث محليًا عند إنشاء طلب',
+                      ),
+                    ),
+                    SegmentedButton<int>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: 1, label: Text('الواردة')),
+                        ButtonSegment(value: 2, label: Text('المؤكدة')),
+                        ButtonSegment(value: 0, label: Text('الكل')),
+                      ],
+                      selected: {_filter},
+                      onSelectionChanged: (value) =>
+                          setState(() => _filter = value.first),
+                    ),
                   ],
-                  selected: {_filter},
-                  onSelectionChanged: (value) =>
-                      setState(() => _filter = value.first),
+                ),
+                Align(
+                  alignment: AlignmentDirectional.centerEnd,
+                  child: TextButton.icon(
+                    onPressed:
+                        _deletingAll ||
+                            !widget.controller.orders.any(
+                              (order) => order.isProcessed,
+                            )
+                        ? null
+                        : _confirmDeleteAll,
+                    icon: const Icon(Icons.delete_sweep_outlined),
+                    label: const Text('حذف الجميع'),
+                  ),
                 ),
               ],
             ),
@@ -236,6 +255,9 @@ class _OrdersScreenState extends State<_OrdersScreen> {
                     itemCount: orders.length,
                     itemBuilder: (context, index) => _OrderCard(
                       order: orders[index],
+                      onDelete: orders[index].isProcessed
+                          ? () => _confirmDeleteOrder(orders[index])
+                          : null,
                       onStatusChanged: (status) async {
                         try {
                           await widget.controller.updateOrderStatus(
@@ -264,13 +286,95 @@ class _OrdersScreenState extends State<_OrdersScreen> {
       );
     },
   );
+
+  Future<void> _confirmDeleteAll() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: const Text('هل أنت متأكد من حذف جميع الطلبات المعالجة؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف الجميع'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deletingAll = true);
+    try {
+      final deletedCount = await widget.controller.deleteProcessedOrders();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            deletedCount == 0
+                ? 'لا توجد طلبات معالجة لحذفها.'
+                : 'تم حذف $deletedCount من الطلبات المعالجة.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_deleteErrorMessage(error))));
+    } finally {
+      if (mounted) setState(() => _deletingAll = false);
+    }
+  }
+
+  Future<void> _confirmDeleteOrder(OrderRecord order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        content: Text('هل أنت متأكد من حذف الطلب #${order.orderNumber}؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('حذف'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.controller.deleteOrder(order);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('تم حذف الطلب.')));
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_deleteErrorMessage(error))));
+    }
+  }
+
+  String _deleteErrorMessage(Object error) => error is OrderDeletionException
+      ? showBackendDiagnostics && error.detail.isNotEmpty
+            ? '${error.message}\n[${error.detail}]'
+            : error.message
+      : 'تعذر حذف الطلب. تحقق من الاتصال وحاول مرة أخرى.';
 }
 
 class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order, required this.onStatusChanged});
+  const _OrderCard({
+    required this.order,
+    required this.onStatusChanged,
+    this.onDelete,
+  });
 
   final OrderRecord order;
   final ValueChanged<OrderStatus> onStatusChanged;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -352,14 +456,25 @@ class _OrderCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              PopupMenuButton<OrderStatus>(
+              PopupMenuButton<String>(
                 tooltip: 'تغيير حالة الطلب',
-                onSelected: onStatusChanged,
+                onSelected: (action) {
+                  if (action == 'delete') {
+                    onDelete?.call();
+                    return;
+                  }
+                  onStatusChanged(OrderStatus.values.byName(action));
+                },
                 itemBuilder: (_) => [
                   for (final status in OrderStatus.values)
                     PopupMenuItem(
-                      value: status,
+                      value: status.name,
                       child: Text(_statusLabel(status)),
+                    ),
+                  if (onDelete != null)
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text('حذف الطلب'),
                     ),
                 ],
                 child: const Icon(Icons.more_horiz),
