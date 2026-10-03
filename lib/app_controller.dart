@@ -122,8 +122,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<bool> hasStaffSession() async =>
-      staffAuth == null || await staffAuth!.isStaffSignedIn();
+  Future<bool> hasStaffSession() async {
+    if (staffAuth == null) return true;
+    final signedIn = await staffAuth!.isStaffSignedIn();
+    if (signedIn && !_syncActive) {
+      _startOrderSync();
+      await refreshOrders();
+    }
+    return signedIn;
+  }
 
   Future<void> signInStaff(String email, String password) async {
     await staffAuth!.signIn(email, password);
@@ -139,6 +146,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _startOrderSync() {
+    if (_syncActive) return;
     _syncActive = true;
     _subscribeOrders();
     _sessionSubscription ??= staffAuth?.sessionEnded().listen(
