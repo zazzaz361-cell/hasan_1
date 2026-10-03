@@ -176,12 +176,33 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   bool _isChecking = false;
   String? _error;
 
+  // Covers both the top number row and the numpad (whose keyLabel is "Numpad 1").
+  static const _digitKeys = [
+    (LogicalKeyboardKey.digit0, LogicalKeyboardKey.numpad0),
+    (LogicalKeyboardKey.digit1, LogicalKeyboardKey.numpad1),
+    (LogicalKeyboardKey.digit2, LogicalKeyboardKey.numpad2),
+    (LogicalKeyboardKey.digit3, LogicalKeyboardKey.numpad3),
+    (LogicalKeyboardKey.digit4, LogicalKeyboardKey.numpad4),
+    (LogicalKeyboardKey.digit5, LogicalKeyboardKey.numpad5),
+    (LogicalKeyboardKey.digit6, LogicalKeyboardKey.numpad6),
+    (LogicalKeyboardKey.digit7, LogicalKeyboardKey.numpad7),
+    (LogicalKeyboardKey.digit8, LogicalKeyboardKey.numpad8),
+    (LogicalKeyboardKey.digit9, LogicalKeyboardKey.numpad9),
+  ];
+
+  String? _digitFor(LogicalKeyboardKey key) {
+    for (var i = 0; i < _digitKeys.length; i++) {
+      if (key == _digitKeys[i].$1 || key == _digitKeys[i].$2) return '$i';
+    }
+    return null;
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is KeyUpEvent || _isChecking) return KeyEventResult.ignored;
     final key = event.logicalKey;
-    final label = key.keyLabel;
-    if (label.length == 1 && '0123456789'.contains(label)) {
-      _press(label);
+    final digit = _digitFor(key);
+    if (digit != null) {
+      _press(digit);
       return KeyEventResult.handled;
     }
     if (key == LogicalKeyboardKey.backspace) {

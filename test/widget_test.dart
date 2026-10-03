@@ -5,6 +5,7 @@ import 'package:dari_pos/main.dart';
 import 'package:dari_pos/models/restaurant.dart';
 import 'package:dari_pos/ui/brand.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -167,6 +168,32 @@ void main() {
 
     expect(find.text('الطلبات الواردة'), findsOneWidget);
     expect(find.text('لا توجد طلبات بعد'), findsOneWidget);
+  });
+
+  testWidgets('cashier PIN accepts keyboard digits and numpad', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final repository = MockLocalRepository(preferences);
+    final controller = AppController(
+      productRepository: repository,
+      categoryRepository: repository,
+      orderRepository: repository,
+      connectionRepository: repository,
+      authRepository: DevelopmentAuthRepository(),
+      qrRepository: QrLinkRepository(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(DariRestaurantApp(controller: controller));
+    await tester.pumpAndSettle();
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
+    await tester.sendKeyEvent(LogicalKeyboardKey.numpad4);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('الطلبات الواردة'), findsOneWidget);
   });
 
   testWidgets('table menu keeps cart and submits the order', (tester) async {
