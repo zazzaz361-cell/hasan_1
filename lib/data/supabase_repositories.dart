@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -291,8 +292,10 @@ class SupabaseStaffAuthRepository implements StaffAuthRepository {
 /// Loads the menu from Supabase and falls back to the local seed when the
 /// backend is empty or unreachable. Writes go to Supabase for staff sessions.
 class SupabaseCatalogRepository
-    implements ProductRepository, CategoryRepository {
+    implements ProductRepository, ProductImageStorage, CategoryRepository {
   SupabaseCatalogRepository(this._client, this._local);
+
+  static const _productImagesBucket = 'product-images';
 
   final SupabaseClient _client;
   final MockLocalRepository _local;
@@ -381,23 +384,69 @@ class SupabaseCatalogRepository
 
   @override
   Future<void> saveProduct(Product product) async {
-    if (_isSignedIn) {
-      await _client.from('products').upsert({
-        'id': product.id,
-        'category_id': product.categoryId,
-        'name_ar': product.nameAr,
-        'name_en': product.nameEn,
-        'description_ar': product.descriptionAr,
-        'description_en': product.descriptionEn,
-        'image': product.image,
-        'price': product.price,
-        'is_available': product.isAvailable,
-        'is_visible': product.isVisible,
-        'sort_order': product.sortOrder,
-        'variants': product.variants.map((value) => value.toJson()).toList(),
-      });
+    if (!_isSignedIn) {
+      throw StateError('Sign in as staff before saving products.');
     }
+    await _client.from('products').upsert({
+      'id': product.id,
+      'category_id': product.categoryId,
+      'name_ar': product.nameAr,
+      'name_en': product.nameEn,
+      'description_ar': product.descriptionAr,
+      'description_en': product.descriptionEn,
+      'image': product.image,
+      'price': product.price,
+      'is_available': product.isAvailable,
+      'is_visible': product.isVisible,
+      'sort_order': product.sortOrder,
+      'variants': product.variants.map((value) => value.toJson()).toList(),
+    });
     await _local.saveProduct(product);
+  }
+
+  @override
+  Future<String> uploadProductImage({
+    required String productId,
+    required Uint8List bytes,
+    required String extension,
+    required String contentType,
+  }) async {
+    if (!_isSignedIn) {
+      throw StateError('Sign in as staff before uploading product images.');
+    }
+    if (!RegExp(r'^[A-Za-z0-9_-]+$').hasMatch(productId)) {
+      throw ArgumentError.value(productId, 'productId', 'Invalid path segment');
+    }
+    final path =
+        'products/$productId/${DateTime.now().microsecondsSinceEpoch}.$extension';
+    final storage = _client.storage.from(_productImagesBucket);
+    await storage.uploadBinary(
+      path,
+      bytes,
+      fileOptions: FileOptions(contentType: contentType),
+    );
+    return storage.getPublicUrl(path);
+  }
+
+  @override
+  Future<void> deleteProductImage(String imageUrl) async {
+    if (!_isSignedIn) {
+      throw StateError('Sign in as staff before deleting product images.');
+    }
+    final base = Uri.parse(
+      _client.storage.from(_productImagesBucket).getPublicUrl(''),
+    );
+    final uri = Uri.tryParse(imageUrl);
+    final prefix = '${base.path}${base.path.endsWith('/') ? '' : '/'}';
+    if (uri == null ||
+        uri.origin != base.origin ||
+        !uri.path.startsWith(prefix)) {
+      return;
+    }
+    final path = Uri.decodeComponent(uri.path.substring(prefix.length));
+    if (path.isNotEmpty) {
+      await _client.storage.from(_productImagesBucket).remove([path]);
+    }
   }
 
   @override

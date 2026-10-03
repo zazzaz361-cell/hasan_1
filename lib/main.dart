@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -145,144 +146,170 @@ class _PinLoginScreenState extends State<PinLoginScreen> {
   bool _isChecking = false;
   String? _error;
 
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent || _isChecking) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final label = key.keyLabel;
+    if (label.length == 1 && '0123456789'.contains(label)) {
+      _press(label);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.backspace) {
+      _press('⌫');
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (_pin.length == 4) _verify();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(22),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 390),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 74,
-                  height: 74,
-                  decoration: BoxDecoration(
-                    color: DariColors.ink,
-                    borderRadius: BorderRadius.circular(21),
+  Widget build(BuildContext context) => Focus(
+    autofocus: true,
+    onKeyEvent: _onKey,
+    child: Scaffold(
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(22),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 390),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 74,
+                    height: 74,
+                    decoration: BoxDecoration(
+                      color: DariColors.ink,
+                      borderRadius: BorderRadius.circular(21),
+                    ),
+                    child: const Icon(
+                      Icons.local_dining_outlined,
+                      color: Colors.white,
+                      size: 35,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.local_dining_outlined,
-                    color: Colors.white,
-                    size: 35,
+                  const SizedBox(height: 16),
+                  const Text(
+                    'DARI',
+                    style: TextStyle(
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'DARI',
-                  style: TextStyle(
-                    fontSize: 27,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
+                  const SizedBox(height: 4),
+                  const Text(
+                    'مطعم داري',
+                    style: TextStyle(color: DariColors.secondary, fontSize: 15),
                   ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'مطعم داري',
-                  style: TextStyle(color: DariColors.secondary, fontSize: 15),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(21),
-                  decoration: BoxDecoration(
-                    color: DariColors.paper,
-                    border: Border.all(color: DariColors.border),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      const Text(
-                        'دخول الكاشير',
-                        style: TextStyle(
-                          fontSize: 19,
-                          fontWeight: FontWeight.w700,
+                  const SizedBox(height: 24),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(21),
+                    decoration: BoxDecoration(
+                      color: DariColors.paper,
+                      border: Border.all(color: DariColors.border),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'دخول الكاشير',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 5),
-                      const Text(
-                        'أدخل الرقم السري للمتابعة',
-                        style: TextStyle(color: DariColors.secondary),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          for (var index = 0; index < 4; index++)
-                            Container(
-                              width: 14,
-                              height: 14,
-                              margin: const EdgeInsets.symmetric(horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: index < _pin.length
-                                    ? DariColors.ink
-                                    : Colors.transparent,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: _error == null
-                                      ? DariColors.secondary
-                                      : DariColors.danger,
+                        const SizedBox(height: 5),
+                        const Text(
+                          'أدخل الرقم السري للمتابعة',
+                          style: TextStyle(color: DariColors.secondary),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (var index = 0; index < 4; index++)
+                              Container(
+                                width: 14,
+                                height: 14,
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: index < _pin.length
+                                      ? DariColors.ink
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: _error == null
+                                        ? DariColors.secondary
+                                        : DariColors.danger,
+                                  ),
                                 ),
                               ),
+                          ],
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: DariColors.danger,
+                              fontSize: 13,
                             ),
+                          ),
                         ],
-                      ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          _error!,
-                          style: const TextStyle(
-                            color: DariColors.danger,
-                            fontSize: 13,
+                        const SizedBox(height: 18),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          children: [
+                            for (var digit = 1; digit <= 9; digit++)
+                              _key('$digit'),
+                            _key('مسح'),
+                            _key('0'),
+                            _key('⌫'),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _pin.length == 4 && !_isChecking
+                                ? _verify
+                                : null,
+                            child: _isChecking
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Text('دخول'),
                           ),
                         ),
                       ],
-                      const SizedBox(height: 18),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        children: [
-                          for (var digit = 1; digit <= 9; digit++)
-                            _key('$digit'),
-                          _key('مسح'),
-                          _key('0'),
-                          _key('⌫'),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: _pin.length == 4 && !_isChecking
-                              ? _verify
-                              : null,
-                          child: _isChecking
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : const Text('دخول'),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                TextButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, '/menu'),
-                  icon: const Icon(Icons.menu_book_outlined, size: 18),
-                  label: const Text('عرض قائمة الزبون'),
-                ),
-                const SizedBox(height: 7),
-                const Text(
-                  'طعم مختلف .. تجربة تستحق',
-                  style: TextStyle(color: DariColors.secondary, fontSize: 12),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/menu'),
+                    icon: const Icon(Icons.menu_book_outlined, size: 18),
+                    label: const Text('عرض قائمة الزبون'),
+                  ),
+                  const SizedBox(height: 7),
+                  const Text(
+                    'طعم مختلف .. تجربة تستحق',
+                    style: TextStyle(color: DariColors.secondary, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -314,6 +314,31 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String> uploadProductImage({
+    required String productId,
+    required Uint8List bytes,
+    required String extension,
+    required String contentType,
+  }) {
+    final storage = productRepository;
+    if (storage is! ProductImageStorage) {
+      throw StateError('Product image storage is not configured.');
+    }
+    return (storage as ProductImageStorage).uploadProductImage(
+      productId: productId,
+      bytes: bytes,
+      extension: extension,
+      contentType: contentType,
+    );
+  }
+
+  Future<void> deleteProductImage(String imageUrl) async {
+    final storage = productRepository;
+    if (storage is ProductImageStorage) {
+      await (storage as ProductImageStorage).deleteProductImage(imageUrl);
+    }
+  }
+
   Future<void> deleteProduct(Product product) async {
     await productRepository.deleteProduct(product.id);
     products = await productRepository.loadProducts();

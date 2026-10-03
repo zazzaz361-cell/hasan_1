@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,17 @@ abstract interface class ProductRepository {
   Future<List<Product>> loadProducts();
   Future<void> saveProduct(Product product);
   Future<void> deleteProduct(String productId);
+}
+
+abstract interface class ProductImageStorage {
+  Future<String> uploadProductImage({
+    required String productId,
+    required Uint8List bytes,
+    required String extension,
+    required String contentType,
+  });
+
+  Future<void> deleteProductImage(String imageUrl);
 }
 
 abstract interface class CategoryRepository {

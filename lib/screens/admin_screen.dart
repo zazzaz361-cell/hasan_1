@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -387,19 +389,26 @@ class _ProductsAdmin extends StatelessWidget {
       'بلا فئة';
 
   Future<void> _editProduct(BuildContext context, {Product? product}) async {
-    final result = await showDialog<Product>(
+    await showDialog<void>(
       context: context,
-      builder: (_) =>
-          _ProductForm(categories: controller.categories, product: product),
+      builder: (_) => _ProductForm(
+        categories: controller.categories,
+        controller: controller,
+        product: product,
+      ),
     );
-    if (result != null) await controller.saveProduct(result);
   }
 }
 
 class _ProductForm extends StatefulWidget {
-  const _ProductForm({required this.categories, this.product});
+  const _ProductForm({
+    required this.categories,
+    required this.controller,
+    this.product,
+  });
 
   final List<Category> categories;
+  final AppController controller;
   final Product? product;
 
   @override
@@ -428,6 +437,12 @@ class _ProductFormState extends State<_ProductForm> {
       (widget.categories.isEmpty ? '' : widget.categories.first.id);
   late bool _available = widget.product?.isAvailable ?? true;
   late bool _visible = widget.product?.isVisible ?? true;
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
+  String? _selectedImageExtension;
+  String? _selectedImageContentType;
+  bool _clearImage = false;
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -490,6 +505,48 @@ class _ProductFormState extends State<_ProductForm> {
                 decoration: const InputDecoration(
                   labelText: 'مسار صورة المنتج',
                 ),
+                onChanged: (_) => setState(() => _clearImage = false),
+              ),
+              const SizedBox(height: 7),
+              Row(
+                children: [
+                  Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: DariColors.canvas,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _imagePreview(),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _saving ? null : _chooseImage,
+                          icon: const Icon(Icons.image_outlined),
+                          label: Text(
+                            _image.text.isEmpty && _selectedImage == null
+                                ? 'اختيار صورة'
+                                : 'تغيير الصورة',
+                          ),
+                        ),
+                        if (_image.text.isNotEmpty ||
+                            _selectedImage != null) ...[
+                          TextButton.icon(
+                            onPressed: _saving ? null : _removeImage,
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('إزالة الصورة'),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 9),
               TextFormField(
@@ -519,18 +576,172 @@ class _ProductFormState extends State<_ProductForm> {
     ),
     actions: [
       TextButton(
-        onPressed: () => Navigator.pop(context),
+        onPressed: _saving ? null : () => Navigator.pop(context),
         child: const Text('إلغاء'),
       ),
-      FilledButton(onPressed: _save, child: const Text('حفظ')),
+      FilledButton(
+        onPressed: _saving ? null : _save,
+        child: _saving
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text('حفظ'),
+      ),
     ],
   );
+
+  Widget _imagePreview() {
+    if (_selectedImageBytes != null) {
+      return Image.memory(_selectedImageBytes!, fit: BoxFit.cover);
+    }
+    final path = _clearImage ? '' : _image.text.trim();
+    if (path.isEmpty) {
+      return const Icon(Icons.restaurant_menu, color: DariColors.secondary);
+    }
+    final uri = Uri.tryParse(path);
+    final isNetworkImage =
+        uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+    return isNetworkImage
+        ? Image.network(
+            path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const Icon(
+              Icons.image_not_supported_outlined,
+              color: DariColors.secondary,
+            ),
+          )
+        : Image.asset(
+            path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const Icon(
+              Icons.image_not_supported_outlined,
+              color: DariColors.secondary,
+            ),
+          );
+  }
+
+  Future<void> _chooseImage() async {
+    try {
+      final file = await ImagePicker().pickImage(source: ImageSource.gallery);
+      if (file == null) return;
+      if (await file.length() > 5 * 1024 * 1024) {
+        _showImageError('حجم الصورة أكبر من الحد المسموح (5 ميغابايت).');
+        return;
+      }
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 5 * 1024 * 1024) {
+        _showImageError('حجم الصورة أكبر من الحد المسموح (5 ميغابايت).');
+        return;
+      }
+      final (extension, contentType) = _imageFormat(bytes);
+      if (extension == null || contentType == null) {
+        _showImageError('اختر صورة بصيغة PNG أو JPG أو GIF أو WEBP.');
+        return;
+      }
+      setState(() {
+        _selectedImage = file;
+        _selectedImageBytes = bytes;
+        _selectedImageExtension = extension;
+        _selectedImageContentType = contentType;
+        _clearImage = false;
+      });
+    } catch (_) {
+      _showImageError('تعذر اختيار الصورة من الجهاز.');
+    }
+  }
+
+  (String?, String?) _imageFormat(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4e &&
+        bytes[3] == 0x47 &&
+        bytes[4] == 0x0d &&
+        bytes[5] == 0x0a &&
+        bytes[6] == 0x1a &&
+        bytes[7] == 0x0a) {
+      return ('png', 'image/png');
+    }
+    if (bytes.length >= 3 &&
+        bytes[0] == 0xff &&
+        bytes[1] == 0xd8 &&
+        bytes[2] == 0xff) {
+      return ('jpg', 'image/jpeg');
+    }
+    if (bytes.length >= 6) {
+      final signature = String.fromCharCodes(bytes.take(6));
+      if (signature == 'GIF87a' || signature == 'GIF89a') {
+        return ('gif', 'image/gif');
+      }
+    }
+    if (bytes.length >= 12 &&
+        String.fromCharCodes(bytes.sublist(0, 4)) == 'RIFF' &&
+        String.fromCharCodes(bytes.sublist(8, 12)) == 'WEBP') {
+      return ('webp', 'image/webp');
+    }
+    return (null, null);
+  }
+
+  void _removeImage() {
+    setState(() {
+      _selectedImage = null;
+      _selectedImageBytes = null;
+      _selectedImageExtension = null;
+      _selectedImageContentType = null;
+      _image.clear();
+      _clearImage = true;
+    });
+  }
+
+  void _showImageError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // Maps a backend failure to a short, non-sensitive Arabic reason.
+  String _failureHint(Object error) {
+    final text = error.toString().toLowerCase();
+    if (text.contains('sign in as staff')) {
+      return 'لا توجد جلسة موظف نشطة، سجّل الدخول مجددًا.';
+    }
+    if (text.contains('bucket not found')) {
+      return 'حاوية product-images غير موجودة (لم يُطبَّق migration 003).';
+    }
+    if (text.contains('row-level security') ||
+        text.contains('unauthorized') ||
+        text.contains('403') ||
+        text.contains('42501')) {
+      return 'رفضت سياسة الصلاحيات العملية (الحساب ليس موظفًا فعّالًا في staff_profiles).';
+    }
+    if (text.contains('23503') || text.contains('foreign key')) {
+      return 'التصنيف المختار غير موجود في قاعدة البيانات.';
+    }
+    if (text.contains('mime') || text.contains('not supported')) {
+      return 'نوع الملف غير مسموح في التخزين.';
+    }
+    if (text.contains('exceeded') ||
+        text.contains('too large') ||
+        text.contains('413')) {
+      return 'حجم الملف أكبر من الحد المسموح.';
+    }
+    if (text.contains('failed host lookup') ||
+        text.contains('clientexception') ||
+        text.contains('xmlhttprequest') ||
+        text.contains('socketexception')) {
+      return 'مشكلة في الاتصال بالشبكة.';
+    }
+    return 'غير محدد (${error.runtimeType}).';
+  }
 
   String? _required(String? value) =>
       value == null || value.trim().isEmpty ? 'هذا الحقل مطلوب' : null;
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
     final variants = <ProductVariant>[];
     for (final line in _variants.text.split('\n')) {
       if (line.trim().isEmpty) continue;
@@ -547,21 +758,65 @@ class _ProductFormState extends State<_ProductForm> {
       }
     }
     final previous = widget.product;
-    Navigator.pop(
-      context,
-      Product(
-        id: previous?.id ?? 'product-${DateTime.now().microsecondsSinceEpoch}',
-        categoryId: _categoryId,
-        nameAr: _name.text.trim(),
-        price: int.parse(_price.text),
-        descriptionAr: _description.text.trim(),
-        image: _image.text.trim().isEmpty ? null : _image.text.trim(),
-        isAvailable: _available,
-        isVisible: _visible,
-        variants: variants,
-        sortOrder: previous?.sortOrder ?? 0,
-      ),
+    final productId =
+        previous?.id ?? 'product-${DateTime.now().microsecondsSinceEpoch}';
+    var image = _clearImage
+        ? null
+        : (_image.text.trim().isEmpty ? null : _image.text.trim());
+    if (_selectedImage != null) {
+      try {
+        image = await widget.controller.uploadProductImage(
+          productId: productId,
+          bytes: _selectedImageBytes!,
+          extension: _selectedImageExtension!,
+          contentType: _selectedImageContentType!,
+        );
+      } catch (error) {
+        debugPrint('Product image upload failed: ${error.runtimeType}: $error');
+        if (mounted) setState(() => _saving = false);
+        _showImageError(
+          'تعذر رفع صورة المنتج. تحقق من الاتصال وصلاحيات التخزين ثم حاول مجددًا.'
+          '\nالسبب المحتمل: ${_failureHint(error)}'
+          '${kDebugMode ? '\n[$error]' : ''}',
+        );
+        return;
+      }
+    }
+    final savedProduct = Product(
+      id: productId,
+      categoryId: _categoryId,
+      nameAr: _name.text.trim(),
+      price: int.parse(_price.text),
+      descriptionAr: _description.text.trim(),
+      image: image,
+      isAvailable: _available,
+      isVisible: _visible,
+      variants: variants,
+      sortOrder: previous?.sortOrder ?? 0,
     );
+    try {
+      await widget.controller.saveProduct(savedProduct);
+    } catch (error) {
+      debugPrint('Product save failed: ${error.runtimeType}: $error');
+      if (mounted) setState(() => _saving = false);
+      _showImageError(
+        'تعذر حفظ المنتج. تحقق من الاتصال وحاول مرة أخرى.'
+        '\nالسبب المحتمل: ${_failureHint(error)}'
+        '${kDebugMode ? '\n[$error]' : ''}',
+      );
+      return;
+    }
+    final previousImage = previous?.image;
+    if (previousImage != null && previousImage != savedProduct.image) {
+      try {
+        await widget.controller.deleteProductImage(previousImage);
+      } catch (_) {
+        _showImageError(
+          'تم حفظ المنتج، لكن تعذر حذف الصورة القديمة من التخزين.',
+        );
+      }
+    }
+    if (mounted) Navigator.pop(context);
   }
 }
 
@@ -1232,6 +1487,8 @@ class _ConnectionPinDialogState extends State<_ConnectionPinDialog> {
       controller: _pin,
       obscureText: true,
       keyboardType: TextInputType.number,
+      textInputAction: TextInputAction.done,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       maxLength: 4,
       autofocus: true,
       decoration: const InputDecoration(labelText: 'الرقم السري'),

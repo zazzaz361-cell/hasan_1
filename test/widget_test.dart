@@ -3,6 +3,7 @@ import 'package:dari_pos/data/menu_seed.dart';
 import 'package:dari_pos/data/repositories.dart';
 import 'package:dari_pos/main.dart';
 import 'package:dari_pos/models/restaurant.dart';
+import 'package:dari_pos/ui/brand.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,15 +12,13 @@ void main() {
   test('menu seed matches verified reference items and pizza prices', () {
     expect(
       seedProducts.any(
-        (product) =>
-            product.nameAr == 'نقانق' && product.price == 2000,
+        (product) => product.nameAr == 'نقانق' && product.price == 2000,
       ),
       isTrue,
     );
     expect(
       seedProducts.any(
-        (product) =>
-            product.nameAr == 'جاجيك' && product.price == 2000,
+        (product) => product.nameAr == 'جاجيك' && product.price == 2000,
       ),
       isTrue,
     );
@@ -33,6 +32,41 @@ void main() {
           .toList(),
       [('صغير', 5000), ('وسط', 8000), ('كبير', 11000)],
     );
+  });
+
+  test('product image can be cleared from the existing product field', () {
+    final product = seedProducts.first.copyWith(
+      image: 'https://storage.example/product.png',
+    );
+
+    expect(product.copyWith(clearImage: true).image, isNull);
+  });
+
+  testWidgets('product cards render stored network image URLs', (tester) async {
+    final product = seedProducts.first.copyWith(
+      image: 'https://storage.example/product.png',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 180,
+            height: 240,
+            child: ProductCard(
+              product: product,
+              categoryName: 'الريزو',
+              allowNetworkImage: true,
+              onTap: () {},
+              onAdd: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(image.image, isA<NetworkImage>());
   });
 
   testWidgets('cashier PIN opens the order inbox', (tester) async {

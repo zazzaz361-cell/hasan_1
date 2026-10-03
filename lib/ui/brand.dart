@@ -152,18 +152,23 @@ class ProductCard extends StatelessWidget {
     super.key,
     required this.product,
     required this.categoryName,
+    this.imageAssetPath,
+    this.allowNetworkImage = false,
     required this.onTap,
     required this.onAdd,
   });
 
   final Product product;
   final String categoryName;
+  final String? imageAssetPath;
+  final bool allowNetworkImage;
   final VoidCallback onTap;
   final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
     final prices = product.variants.map((variant) => variant.price).toList();
+    final imagePath = imageAssetPath ?? product.image;
     final priceLabel = prices.isEmpty
         ? formatIqd(product.price)
         : '${formatIqd(prices.reduce((a, b) => a < b ? a : b))}+';
@@ -189,7 +194,7 @@ class ProductCard extends StatelessWidget {
                     color: DariColors.canvas,
                     borderRadius: BorderRadius.circular(5),
                   ),
-                  child: product.image == null || product.image!.isEmpty
+                  child: imagePath == null || imagePath.isEmpty
                       ? Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -210,13 +215,9 @@ class ProductCard extends StatelessWidget {
                         )
                       : ClipRRect(
                           borderRadius: BorderRadius.circular(5),
-                          child: Image.asset(
-                            product.image!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => const Icon(
-                              Icons.image_not_supported_outlined,
-                              color: DariColors.secondary,
-                            ),
+                          child: _productImage(
+                            imagePath,
+                            allowNetworkImage: allowNetworkImage,
                           ),
                         ),
                 ),
@@ -280,6 +281,29 @@ class ProductCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Widget _productImage(String path, {required bool allowNetworkImage}) {
+    final uri = Uri.tryParse(path);
+    final isNetworkImage =
+        allowNetworkImage &&
+        uri != null &&
+        (uri.scheme == 'https' || uri.scheme == 'http');
+    final errorFallback = const Icon(
+      Icons.image_not_supported_outlined,
+      color: DariColors.secondary,
+    );
+    return isNetworkImage
+        ? Image.network(
+            path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => errorFallback,
+          )
+        : Image.asset(
+            path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => errorFallback,
+          );
   }
 }
 

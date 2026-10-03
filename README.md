@@ -40,7 +40,8 @@ The appetizer labels `نقانق` and `جاجيك` have been checked against the
 Without Supabase settings the app keeps using the local development repository.
 With them, customer orders go to Supabase and the cashier reads them from there.
 
-1. In the Supabase SQL Editor run `supabase/migrations/001_dari_schema.sql`, then `supabase/seed.sql`
+1. In the Supabase SQL Editor run `supabase/migrations/001_dari_schema.sql`,
+   `supabase/migrations/003_product_image_storage.sql`, then `supabase/seed.sql`
    (menu data generated from `lib/data/menu_seed.dart` only).
 2. Dashboard -> Authentication -> Users: create a staff user (email + password).
 3. Authorize that user (replace the UUID with the user's id):

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
 import '../data/repositories.dart';
@@ -535,6 +536,7 @@ class _ManualOrderScreenState extends State<_ManualOrderScreen> {
                             categoryName: category?.nameAr ?? '',
                             onTap: () => _add(product),
                             onAdd: () => _add(product),
+                            allowNetworkImage: true,
                           );
                         },
                       ),
@@ -913,7 +915,10 @@ class _CashierPinDialogState extends State<_CashierPinDialog> {
       controller: _pin,
       obscureText: true,
       keyboardType: TextInputType.number,
+      textInputAction: TextInputAction.done,
+      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
       maxLength: 4,
+      autofocus: true,
       decoration: const InputDecoration(labelText: 'الرقم السري'),
       onChanged: (_) => setState(() {}),
       onSubmitted: (value) =>

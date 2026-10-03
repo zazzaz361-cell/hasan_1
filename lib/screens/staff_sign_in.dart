@@ -41,7 +41,7 @@ class _StaffSignInDialogState extends State<_StaffSignInDialog> {
   }
 
   Future<void> _submit() async {
-    if (_email.text.trim().isEmpty || _password.text.isEmpty) return;
+    if (_busy || _email.text.trim().isEmpty || _password.text.isEmpty) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -75,6 +75,8 @@ class _StaffSignInDialogState extends State<_StaffSignInDialog> {
       children: [
         TextField(
           controller: _email,
+          autofocus: true,
+          textInputAction: TextInputAction.next,
           keyboardType: TextInputType.emailAddress,
           autofillHints: const [AutofillHints.username],
           decoration: const InputDecoration(labelText: 'البريد الإلكتروني'),
@@ -83,6 +85,7 @@ class _StaffSignInDialogState extends State<_StaffSignInDialog> {
         TextField(
           controller: _password,
           obscureText: true,
+          textInputAction: TextInputAction.done,
           autofillHints: const [AutofillHints.password],
           decoration: const InputDecoration(labelText: 'كلمة المرور'),
           onSubmitted: (_) => _submit(),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_controller.dart';
 import '../data/repositories.dart';
@@ -6,6 +7,9 @@ import '../models/restaurant.dart';
 import '../ui/brand.dart';
 import 'admin_screen.dart';
 import 'staff_sign_in.dart';
+
+// Add product IDs here only when matching photos exist in assets/products/.
+const _customerProductImageAssets = <String, String>{};
 
 class CustomerMenuScreen extends StatefulWidget {
   const CustomerMenuScreen({
@@ -157,6 +161,9 @@ class _CustomerMenuScreenState extends State<CustomerMenuScreen> {
                                 return ProductCard(
                                   product: product,
                                   categoryName: category.nameAr,
+                                  imageAssetPath:
+                                      _customerProductImageAssets[product.id],
+                                  allowNetworkImage: true,
                                   onTap: () => _showProductDetails(product),
                                   onAdd: () => product.variants.isEmpty
                                       ? controller.addToCart(product)
@@ -509,13 +516,13 @@ class _ProductDetailsSheetState extends State<ProductDetailsSheet> {
               color: DariColors.accentSoft,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: product.image == null
+            child: product.image == null || product.image!.isEmpty
                 ? const Icon(
                     Icons.restaurant_menu,
                     size: 54,
                     color: DariColors.secondary,
                   )
-                : Image.asset(product.image!, fit: BoxFit.cover),
+                : _customerProductImage(product.image!),
           ),
           const SizedBox(height: 16),
           Text(product.nameAr, style: Theme.of(context).textTheme.titleLarge),
@@ -585,6 +592,29 @@ class _ProductDetailsSheetState extends State<ProductDetailsSheet> {
         ],
       ),
     );
+  }
+
+  Widget _customerProductImage(String path) {
+    final uri = Uri.tryParse(path);
+    final isNetworkImage =
+        uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+    return isNetworkImage
+        ? Image.network(
+            path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const Icon(
+              Icons.image_not_supported_outlined,
+              color: DariColors.secondary,
+            ),
+          )
+        : Image.asset(
+            path,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const Icon(
+              Icons.image_not_supported_outlined,
+              color: DariColors.secondary,
+            ),
+          );
   }
 }
 
@@ -833,32 +863,58 @@ class _PinDialog extends StatefulWidget {
 class _PinDialogState extends State<_PinDialog> {
   String _pin = '';
 
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is KeyUpEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    final label = key.keyLabel;
+    if (label.length == 1 && '0123456789'.contains(label)) {
+      if (_pin.length < 4) setState(() => _pin += label);
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.backspace) {
+      if (_pin.isNotEmpty) {
+        setState(() => _pin = _pin.substring(0, _pin.length - 1));
+      }
+      return KeyEventResult.handled;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      if (_pin.length == 4) Navigator.pop(context, _pin);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: Text(widget.title),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text('أدخل الرقم السري'),
-        const SizedBox(height: 14),
-        Text(
-          '● ' * _pin.length + '○ ' * (4 - _pin.length),
-          style: const TextStyle(fontSize: 18, letterSpacing: 4),
-        ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: 230,
-          child: Wrap(
-            alignment: WrapAlignment.center,
-            children: [
-              for (var digit = 1; digit <= 9; digit++) _key('$digit'),
-              _key('مسح'),
-              _key('0'),
-              _key('⌫'),
-            ],
+    content: Focus(
+      autofocus: true,
+      onKeyEvent: _onKey,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('أدخل الرقم السري'),
+          const SizedBox(height: 14),
+          Text(
+            '● ' * _pin.length + '○ ' * (4 - _pin.length),
+            style: const TextStyle(fontSize: 18, letterSpacing: 4),
           ),
-        ),
-      ],
+          const SizedBox(height: 14),
+          SizedBox(
+            width: 230,
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              children: [
+                for (var digit = 1; digit <= 9; digit++) _key('$digit'),
+                _key('مسح'),
+                _key('0'),
+                _key('⌫'),
+              ],
+            ),
+          ),
+        ],
+      ),
     ),
     actions: [
       TextButton(
