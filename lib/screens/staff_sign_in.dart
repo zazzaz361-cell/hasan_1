@@ -28,26 +28,31 @@ class _StaffSignInDialog extends StatefulWidget {
 }
 
 class _StaffSignInDialogState extends State<_StaffSignInDialog> {
-  final _email = TextEditingController();
+  final _identifier = TextEditingController();
   final _password = TextEditingController();
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
-    _email.dispose();
+    _identifier.dispose();
     _password.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    if (_busy || _email.text.trim().isEmpty || _password.text.isEmpty) return;
+    if (_busy || _identifier.text.trim().isEmpty || _password.text.isEmpty) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await widget.controller.signInStaff(_email.text.trim(), _password.text);
+      await widget.controller.signInStaff(
+        _identifier.text.trim(),
+        _password.text,
+      );
       if (mounted) Navigator.pop(context, true);
     } catch (error) {
       if (mounted) {
@@ -74,12 +79,15 @@ class _StaffSignInDialogState extends State<_StaffSignInDialog> {
       mainAxisSize: MainAxisSize.min,
       children: [
         TextField(
-          controller: _email,
+          controller: _identifier,
           autofocus: true,
           textInputAction: TextInputAction.next,
-          keyboardType: TextInputType.emailAddress,
+          keyboardType: TextInputType.text,
           autofillHints: const [AutofillHints.username],
-          decoration: const InputDecoration(labelText: 'البريد الإلكتروني'),
+          decoration: const InputDecoration(
+            labelText: 'البريد الإلكتروني أو رقم الهاتف',
+            hintText: 'أدخل البريد الإلكتروني أو رقم الهاتف',
+          ),
         ),
         const SizedBox(height: 8),
         TextField(

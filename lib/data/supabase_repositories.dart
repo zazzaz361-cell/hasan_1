@@ -279,9 +279,19 @@ class SupabaseStaffAuthRepository implements StaffAuthRepository {
 
   // Temporary diagnostics: reports which stage failed (auth, RPC, or is_staff=false).
   @override
-  Future<void> signIn(String email, String password) async {
+  Future<void> signIn(String identifier, String password) async {
     try {
-      await _client.auth.signInWithPassword(email: email, password: password);
+      if (identifier.contains('@')) {
+        await _client.auth.signInWithPassword(
+          email: identifier,
+          password: password,
+        );
+      } else {
+        await _client.auth.signInWithPassword(
+          phone: identifier,
+          password: password,
+        );
+      }
     } on AuthException catch (error) {
       debugPrint(
         'signInWithPassword failed: ${error.statusCode} ${error.message}',

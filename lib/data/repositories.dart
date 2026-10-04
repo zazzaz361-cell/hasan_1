@@ -43,7 +43,7 @@ abstract interface class OrderChangeSource {
 
 abstract interface class StaffAuthRepository {
   Future<bool> isStaffSignedIn();
-  Future<void> signIn(String email, String password);
+  Future<void> signIn(String identifier, String password);
   Future<void> signOut();
   Stream<void> sessionEnded();
 }

@@ -45,6 +45,20 @@ class _CashierScreenState extends State<CashierScreen> {
         .pushNamedAndRemoveUntil('/cashier', (route) => false);
   }
 
+  Future<void> _logout() async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.controller.signOutStaff();
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('تعذّر تسجيل الخروج، حاول مرة أخرى')),
+      );
+      return;
+    }
+    navigator.pushNamedAndRemoveUntil('/cashier', (route) => false);
+  }
+
   static const _labels = ['الطلبات', 'طلب يدوي', 'منيو الزبون', 'الإدارة'];
   static const _icons = [
     Icons.receipt_long_outlined,
@@ -61,6 +75,12 @@ class _CashierScreenState extends State<CashierScreen> {
         title: const DariWordmark(compact: true),
         actions: [
           Text('الكاشير', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(width: 8),
+          TextButton.icon(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            label: const Text('تسجيل الخروج'),
+          ),
           const SizedBox(width: 15),
         ],
       ),

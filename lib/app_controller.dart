@@ -132,8 +132,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return signedIn;
   }
 
-  Future<void> signInStaff(String email, String password) async {
-    await staffAuth!.signIn(email, password);
+  Future<void> signInStaff(String identifier, String password) async {
+    await staffAuth!.signIn(identifier, password);
     staffSessionExpired = false;
     final results = await Future.wait<Object>([
       productRepository.loadProducts(),
@@ -143,6 +143,19 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     categories = results[1] as List<Category>;
     await refreshOrders();
     _startOrderSync();
+  }
+
+  Future<void> signOutStaff() async {
+    _stopOrderSync();
+    try {
+      await staffAuth?.signOut();
+    } finally {
+      orders = [];
+      cart = [];
+      realtimeStatus = 'idle';
+      staffSessionExpired = false;
+      notifyListeners();
+    }
   }
 
   void _startOrderSync() {
