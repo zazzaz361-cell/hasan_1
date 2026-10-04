@@ -1277,17 +1277,11 @@ class _ConnectionAdmin extends StatefulWidget {
 }
 
 class _ConnectionAdminState extends State<_ConnectionAdmin> {
+  static const _loyverseBaseUrl = 'https://api.loyverse.com/v1.0';
   late final _apiBase = TextEditingController(
-    text: widget.controller.connectionSettings.apiBaseUrl,
-  );
-  late final _server = TextEditingController(
-    text: widget.controller.connectionSettings.serverUrl,
-  );
-  late final _apiPort = TextEditingController(
-    text: widget.controller.connectionSettings.port,
-  );
-  late final _apiKey = TextEditingController(
-    text: widget.controller.connectionSettings.apiKey,
+    text: widget.controller.connectionSettings.apiBaseUrl.isEmpty
+        ? _loyverseBaseUrl
+        : widget.controller.connectionSettings.apiBaseUrl,
   );
   late final _bridge = TextEditingController(
     text: widget.controller.connectionSettings.bridgeUrl,
@@ -1306,9 +1300,6 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
   @override
   void dispose() {
     _apiBase.dispose();
-    _server.dispose();
-    _apiPort.dispose();
-    _apiKey.dispose();
     _bridge.dispose();
     _bridgePort.dispose();
     _device.dispose();
@@ -1360,25 +1351,26 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
             hintText: 'https://api.loyverse.com/v1.0',
           ),
         ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _server,
-          decoration: const InputDecoration(labelText: 'Server URL'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _apiPort,
-          decoration: const InputDecoration(labelText: 'Port'),
-        ),
-        const SizedBox(height: 10),
-        TextField(
-          controller: _apiKey,
-          obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'API Key',
-            helperText:
-                'غير مستخدم مع Loyverse. لا تُدخل الـ Access Token هنا؛ يُحفظ كسر في Supabase.',
-            helperMaxLines: 2,
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: DariColors.paper,
+            border: Border.all(color: DariColors.border),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.lock_outline, size: 18, color: DariColors.secondary),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Loyverse Access Token يتم تخزينه بأمان في Supabase Secrets.\nلا تضع الـ Access Token هنا.',
+                  style: TextStyle(color: DariColors.secondary, height: 1.5),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -1488,9 +1480,6 @@ class _ConnectionAdminState extends State<_ConnectionAdmin> {
 
   ConnectionSettings _settings() => ConnectionSettings(
     apiBaseUrl: _apiBase.text.trim(),
-    serverUrl: _server.text.trim(),
-    port: _apiPort.text.trim(),
-    apiKey: _apiKey.text,
     bridgeUrl: _bridge.text.trim(),
     bridgePort: _bridgePort.text.trim(),
     deviceName: _device.text.trim(),
